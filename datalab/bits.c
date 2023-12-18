@@ -170,18 +170,34 @@ int tmin(void) {
  *   Legal ops: ! ~ & ^ | +
  *   Max ops: 10
  *   Rating: 1
- 
- x == 011111...
- x + 1 == 
-      100000...
-
-  100000001
-  000000000
-  011111110
- 
+ *   1. x = 10000000
+ *     ~x = 01111111
+ *  x + 1 = 10000001
+ *  ^ -> 11111110
+ *  ! -> 0
+ * 
+ *   2. x = 01111111
+ *     ~x = 10000000
+ *  x + 1 = 10000000
+ *  ^ -> 00000000
+ *  ! -> 1
+ *     ~x = 10000000
+ *          00000000
+ *     ^ -> 10000000
+ *     ! -> 0
+ *     ! -> 1
+ *   3. x = 11111111
+ *     ~x = 00000000
+ *  x + 1 = 00000000
+ *     ^ -> 00000000
+ *     ! -> 1
+ *     ~x = 00000000
+ *     ^ -> 00000000
+ *     ! -> 1
+ *     ! -> 0
  */
 int isTmax(int x) {
-  return !!(0 & (x + 1) & x);
+  return !(~x ^ (x + 1)) & !!(~x ^ 0);
 }
 /* 
  * allOddBits - return 1 if all odd-numbered bits in word set to 1
@@ -190,9 +206,21 @@ int isTmax(int x) {
  *   Legal ops: ! ~ & ^ | + << >>
  *   Max ops: 12
  *   Rating: 2
+ *   1010
+ *   11111111
+ *   00001010
+ *   00000000
+ *   1010
+ *   10100000 1010
+ *   10101010
+ *   10101010 10101010
+ *   00000000 
+ *   01111111 11111111
  */
 int allOddBits(int x) {
-  return 2;
+  int mask = 0xAA + (0xAA << 8);
+  mask = mask + (mask << 16);
+  return !(mask ^ (x & mask));
 }
 /* 
  * negate - return -x 
@@ -200,9 +228,13 @@ int allOddBits(int x) {
  *   Legal ops: ! ~ & ^ | + << >>
  *   Max ops: 5
  *   Rating: 2
+ * 00000001
+ * 11111110
+ * 11111111
+ * 00000000
  */
 int negate(int x) {
-  return 2;
+  return ~x + 1;
 }
 //3
 /* 
@@ -213,9 +245,19 @@ int negate(int x) {
  *   Legal ops: ! ~ & ^ | + << >>
  *   Max ops: 15
  *   Rating: 3
+ *   0x0011
+ *   11110000 
+ *   use a to check if the last but not least 4 - bit is 0x3
+ *   then x = x & 0xf means I just want to check the last 4 - bit
+ *   and  x < y <-> x - y < 0
+ *        x + (-y) < 0
+ *        (x + (~y + 1) & Tmin) >> 31 == 1
+ *        we take y as 0xA
  */
 int isAsciiDigit(int x) {
-  return 2;
+  int a = ((x >> 4) ^ 0x3);
+  x = x & 0xf;
+  return !(a) & (((x + ((~0xA) + 1)) & (1 << 31)) >> 31);
 }
 /* 
  * conditional - same as x ? y : z 
@@ -223,9 +265,15 @@ int isAsciiDigit(int x) {
  *   Legal ops: ! ~ & ^ | + << >>
  *   Max ops: 16
  *   Rating: 3
+ *   x = 0 -> !!x = 0 -> flag = 0
+ *   flag & y = 0 , ~flag = 0xffff....     ~flag & z = z
+ *   x != 0 -> !!x = 1 -> flag = -1 0xffff..
+ *   flag & y = y, ~flag = 0x0000...
  */
 int conditional(int x, int y, int z) {
-  return 2;
+  x = !!x;
+  int flag = (~(x)) + 1;
+  return (flag & y) | (~flag & z);
 }
 /* 
  * isLessOrEqual - if x <= y  then return 1, else return 0 
@@ -233,10 +281,24 @@ int conditional(int x, int y, int z) {
  *   Legal ops: ! ~ & ^ | + << >>
  *   Max ops: 24
  *   Rating: 3
+ *   00000001
+ *   11111110
+ *   11111111
+ *   01111111
+ *   01111111
+ *       1110
  */
-int isLessOrEqual(int x, int y) {
-  return 2;
+int equal(int x, int y)
+{
+  return !((x) ^ (y));
 }
+
+int isLessOrEqual(int x, int y) {
+  int sign_x = x & (1 << 31);
+  int sign_y = y & (1 << 31);
+  return equal(x, y) | conditional(sign_x ^ sign_y, !!(sign_x), (!!((x + negate(y)) & (1 << 31))) );
+}
+
 //4
 /* 
  * logicalNeg - implement the ! operator, using all of 
@@ -245,24 +307,57 @@ int isLessOrEqual(int x, int y) {
  *   Legal ops: ~ & ^ | + << >>
  *   Max ops: 12
  *   Rating: 4 
- */
+ *        x = 1000 0000 0000 0000
+ *   x >> 8 = 0000 0000 1000 0000 
+ *        x = 1000 0000 1000 0000
+     x >> 4 = 0000 1000 0000 1000
+          x = 1000 1000 1000 1000
+     x >> 2 = 0010 0010 0010 0010
+          x = 1010 1010 1010 1010
+     x >> 1 = 0101 0101 0101 0101
+          x = 1111 1111 1111 1111
+ */  
+
 int logicalNeg(int x) {
-  return 2;
+  x = (x >> 16) | x;
+  x = (x >> 8) | x;
+  x = (x >> 4) | x;
+  x = (x >> 2) | x;
+  x = (x >> 1) | x;
+  return ~x & 1; 
 }
 /* howManyBits - return the minimum number of bits required to represent x in
  *             two's complement
- *  Examples: howManyBits(12) = 5
- *            howManyBits(298) = 10
- *            howManyBits(-5) = 4
- *            howManyBits(0)  = 1
- *            howManyBits(-1) = 1
+ *  Examples: howManyBits(12) = 5    01100
+ * 
+ *            howManyBits(298) = 10  
+ *            howManyBits(-5) = 4    1011 
+ *            howManyBits(0)  = 1    0
+ *            howManyBits(-1) = 1    1
  *            howManyBits(0x80000000) = 32
  *  Legal ops: ! ~ & ^ | + << >>
  *  Max ops: 90
  *  Rating: 4
  */
+int tobool(int x)
+{
+  return !!x;
+}
+
 int howManyBits(int x) {
-  return 0;
+  x = conditional(x & (1 << 31), ~x, x);
+  int b16 = (tobool(x >> 16) << 4);
+  x = x >> b16;
+  int b8 = (tobool(x >> 8) << 3);
+  x = x >> b8;
+  int b4 = (tobool(x >> 4) << 2);
+  x = x >> b4;
+  int b2 = (tobool(x >> 2) << 1);
+  x = x >> b2;
+  int b1 = (tobool(x >> 1));
+  x = x >> b1;
+  int b0 = tobool(x);
+  return b16 + b8 + b4 + b2 + b1 + b0 + 1;
 }
 //float
 /* 
