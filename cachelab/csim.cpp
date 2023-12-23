@@ -9,9 +9,12 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
+//I use C++ to develop this lab
 
 //CacheLine is a structure storing the valid bit, the tag, 
-//and a variable named time_spent_stamp to store the information about time
+//Now valid bit is not 0 or 1 but 0 or the time we accessed it
+//in order to store the time information for convenience of LRU 
+//replacement strategy
 typedef struct
 {
 	int valid;
@@ -20,6 +23,7 @@ typedef struct
 
 int s, E, b;
 
+//Our cache is a set-associative cache
 //Cache is a structure storing the number of sets,
 //how many lines per set, how many bytes per block,
 //and store cachelines as array of array
@@ -29,35 +33,45 @@ typedef struct
 	std::vector<std::vector<CacheLine>> line;
 } Cache;
 
-
-
 //variables to record the number of hit / miss / evict 
 int hit_cnt = 0;
 int miss_cnt = 0;
 int eviction_cnt = 0;
 
+//variable to store the time right now
 int time_spent = 1;
 
+//whether the -v command is used or not
 int verbose = 0;
 
+//the source file name
 char trace_file_name[1000];
+
+//our cache
 Cache cache;
 
+//This is our primary function:
+//It can return the information about miss / hit / eviction 
+//stored in a string named result
 void HitOrMiss(size_t tag, size_t set_index, std::string & result)
 {
-//result += ...
+	//First enumerate the set to determine whether or not we hit
 	for(int i = 0; i < E; i++)
 	{
 		if(cache.line[set_index][i].tag == tag)
 		{
 			result += "hit ";
+			//Now we hit
 			hit_cnt++;
 			cache.line[set_index][i].valid = time_spent;
 			return;
 		}
 	}
 	result += "miss ";
+	//Now we miss
 	miss_cnt++;
+	//Then we want to replace:
+	//Firstly we try to find a line with valid bit == 0
 	for(int i = 0; i < E; i++)
 	{
 		if(cache.line[set_index][i].valid == 0)
@@ -67,8 +81,12 @@ void HitOrMiss(size_t tag, size_t set_index, std::string & result)
 			return;
 		}
 	}
+	//there's no such one
+	//I must evict one with LRU replacement strategy
 	int min_num = INT32_MAX;
 	int evit_num = -1;
+	//enumerate the set to find the line with smallest access time
+	//i.e. last recently used
 	for(int i = 0; i < E; i++)
 	{
 		if(cache.line[set_index][i].valid < min_num)
@@ -79,10 +97,13 @@ void HitOrMiss(size_t tag, size_t set_index, std::string & result)
 	}
 	result += "eviction ";
 	eviction_cnt++;
+	//evict and add the new one
 	cache.line[set_index][evit_num].valid = time_spent;
 	cache.line[set_index][evit_num].tag = tag;
 }
 
+//This is the function to open the source file and call 
+//HitOrMiss function
 void ActCache()
 {
 	std::fstream fs(trace_file_name);
@@ -112,16 +133,17 @@ void ActCache()
 
 		std::string result;
 		HitOrMiss(tag, set_index, result);
+		//If operation is M then I have to call it twice
 		if(operation == 'M')
 		{
 			HitOrMiss(tag, set_index, result);
 		}
+		//if -v is set then output information
 		if(verbose)
 		{
 			std::cout << operation << " " << std::hex << address;
-			std::cout << "," << size << " ";
+			std::cout << "," << size << " " << result << std::endl; 
 		}
-		std::cout << result << std::endl; 
 		time_spent++;
 	}
 	fs.close();
