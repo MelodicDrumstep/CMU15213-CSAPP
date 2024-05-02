@@ -16,7 +16,7 @@ call main
 halt
 
 main:
-    irmovq src, %rdi
+    irmovq src, %rdi      
     irmovq dest, %rsi
     irmovq $3, %rdx
     call copy
