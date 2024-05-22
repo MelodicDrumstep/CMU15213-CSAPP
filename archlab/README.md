@@ -192,3 +192,116 @@ stack:
 
 ### Part B
 
+这部分就是简单改一改那个 seq-full.hcl。 感觉要自己写的地方很少很少。
+
+### Part C
+
+这部分是优化这个函数：
+
+```asm
+	xorq %rax,%rax		# count = 0;
+	andq %rdx,%rdx		# len <= 0?
+	jle Done		# if so, goto Done:
+
+Loop:	
+	mrmovq (%rdi), %r10	# read val from src...
+	rmmovq %r10, (%rsi)	# ...and store it to dst
+	andq %r10, %r10		# val <= 0?
+	jle Npos		# if so, goto Npos:
+	irmovq $1, %r10
+	addq %r10, %rax		# count++
+Npos:	irmovq $1, %r10
+	subq %r10, %rdx		# len--
+	irmovq $8, %r10
+	addq %r10, %rdi		# src++
+	addq %r10, %rsi		# dst++
+	andq %rdx,%rdx		# len > 0?
+	jg Loop			# if so, goto Loop:
+```
+
+首先在 PartB 里面， 我们新加了一个指令 iaddq， 可以直接把 Intermediate 加到寄存器里面， 所以先把能替换的地方都替换了：
+
+
+把
+
+```asm
+irmovq $1, %r10
+addq %r10, %rax		# count++
+```
+
+改成
+
+```asm
+iaddq $1, %rax
+```
+
+之后， 主要优化点在于循环展开。 这里循环展开有很多好处
+
++ 利于 CPU 流水线
+
++ 减少 `iaddq` `src` 和 `dst` 的指令数。
+
+当然， 循环展开也不是越多越好， 如果展开层数太多， 则指令总长度太大， 会增加加载指令的体积， 指令的缓存命中率下降。
+
+最后大概是这样：
+
+
+```asm
+Loop:	
+	mrmovq (%rdi), %rcx
+	mrmovq 8(%rdi), %r8
+	mrmovq 16(%rdi), %r9
+    mrmovq 24(%rdi), %r10
+    mrmovq 32(%rdi), %r11
+    mrmovq 40(%rdi), %r12 
+
+	rmmovq %rcx, (%rsi)
+    rmmovq %r8, 8(%rsi)
+    rmmovq %r9, 16(%rsi)
+    rmmovq %r10, 24(%rsi)
+    rmmovq %r11, 32(%rsi)
+    rmmovq %r12, 40(%rsi)
+
+check0:
+	andq %rcx, %rcx
+	jle check1
+	iaddq $1, %rax
+
+check1:
+	andq %r8, %r8
+	jle check2
+	iaddq $1, %rax
+
+check2:
+	andq %r9, %r9
+	jle check3
+	iaddq $1, %rax
+
+check3:
+	andq %r10, %r10
+	jle check4
+	iaddq $1, %rax
+
+check4:
+	andq %r11, %r11
+	jle check5
+	iaddq $1, %rax
+
+check5:
+	andq %r12, %r12
+	jle check3
+	iaddq $1, %rax
+
+loopback:
+	# src += 6, dst += 6
+	# len -= 6, if > 0, loop again
+	iaddq $48, %rdi
+	iaddq $48, %rdi
+	iaddq $-6, %rdx
+	jge Loop
+
+# Deal with the elements less than 6
+Rest:
+	iaddq $9, %rdx
+	je Done
+```
