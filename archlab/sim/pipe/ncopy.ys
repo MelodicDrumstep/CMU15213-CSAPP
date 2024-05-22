@@ -17,35 +17,138 @@ ncopy:
 # You can modify this portion
 	# Loop header
 	xorq %rax,%rax		# count = 0;
-	iaddq $-9, %rdx
-	jle Rest		# if so, goto Done:
+
+	# Firstly, subtract len by 6, because we want to unroll
+	# the loop by a factor of 6
+	iaddq $-6, %rdx
+	# if after subtracting 6, len < 0, then specailly deal with it
+	jle Rest		
 
 Loop:	
-	mrmovq (%rdi), %r10	# read val from src...
-	rmmovq %r10, (%rsi)	# ...and store it to dst
-	addq %r10, %r10		# val <= 0?
-	iaddq $8, %rdi
-	iaddq $8, %rsi
-	jle Npos		# if so, goto Npos:
+	mrmovq (%rdi), %rcx
+	mrmovq 8(%rdi), %r8
+	mrmovq 16(%rdi), %r9
+    mrmovq 24(%rdi), %r10
+    mrmovq 32(%rdi), %r11
+    mrmovq 40(%rdi), %r12 
+
+	rmmovq %rcx, (%rsi)
+    rmmovq %r8, 8(%rsi)
+    rmmovq %r9, 16(%rsi)
+    rmmovq %r10, 24(%rsi)
+    rmmovq %r11, 32(%rsi)
+    rmmovq %r12, 40(%rsi)
+
+check0:
+	andq %rcx, %rcx
+	jle check1
 	iaddq $1, %rax
-Npos:	
-	iaddq $-1, %rdx		# len--
-	jg Loop			# if so, goto Loop:
-##################################################################
-# Do not modify the following section of code
-# Function epilogue.
+
+check1:
+	andq %r8, %r8
+	jle check2
+	iaddq $1, %rax
+
+check2:
+	andq %r9, %r9
+	jle check3
+	iaddq $1, %rax
+
+check3:
+	andq %r10, %r10
+	jle check4
+	iaddq $1, %rax
+
+check4:
+	andq %r11, %r11
+	jle check5
+	iaddq $1, %rax
+
+check5:
+	andq %r12, %r12
+	jle check3
+	iaddq $1, %rax
+
+loopback:
+	# src += 6, dst += 6
+	# len -= 6, if > 0, loop again
+	iaddq $48, %rdi
+	iaddq $48, %rdi
+	iaddq $-6, %rdx
+	jge Loop
+
+# Deal with the elements less than 6
 Rest:
 	iaddq $9, %rdx
 	je Done
 
+rest0:
 	mrmovq (%rdi), %rcx
 	rmmovq %rcx, (%rsi)
 	andq %rcx, %rcx
-	jle 
+	jle rest00
+	iaddq $1, %rax
+
+rest00:
+	iaddq $-1, %rdx
+	je Done
+
+rest1:
+	mrmovq 8(%rdi), %r8
+	rmmovq %r8, 8(%rsi)
+	andq %r8, %r8
+	jle rest11
+	iaddq $1, %rax
+
+rest11:
+	iaddq $-1, %rdx
+	je Done
+
+rest2:
+	mrmovq 16(%rdi), %r9
+	rmmovq %r9, 16(%rsi)
+	andq %r9, %rc99
+	jle rest22
+	iaddq $1, %rax
+
+rest22:
+	iaddq $-1, %rdx
+	je Done
+
+rest3:
+	mrmovq 24(%rdi), %r10
+	rmmovq %r10, 24(%rsi)
+	andq %r10, %r10
+	jle rest33
+	iaddq $1, %rax
+
+rest33:
+	iaddq $-1, %rdx
+	je Done
+
+rest4:
+	mrmovq 32(%rdi), %r11
+	rmmovq %r11, 32(%rsi)
+	andq %r11, %r11
+	jle rest44
+	iaddq $1, %rax
+
+rest44:
+	iaddq $-1, %rdx
+	je Done
+
+rest5:
+	mrmovq 40(%rdi), %r12
+	rmmovq %r12, 40(%rsi)
+	andq %r12, %r12
+	jle rest55
+	iaddq $1, %rax
+
+rest55:
+	iaddq $-1, %rdx
+	je Done
 
 
-
-	
 ##################################################################
 # Keep the following label at the end of your function
 Done:
